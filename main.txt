@@ -1,0 +1,297 @@
+package won.enc.ptm.vit.trialmaps;
+
+import android.content.Intent;
+import android.os.StrictMode;
+import android.support.v4.app.FragmentActivity;
+import android.os.Bundle;
+import android.util.Log;
+import android.view.View;
+import android.widget.EditText;
+import android.widget.Toast;
+
+import com.google.android.gms.maps.CameraUpdateFactory;
+import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.MarkerOptions;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.util.ArrayList;
+
+public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
+
+    private GoogleMap mMap;
+    private int busNo;
+    JSONObject resp = new JSONObject();
+    JSONArray buses;
+    EditText searchBusText;
+
+    ArrayList<Bus> busList;
+    //boolean youWantMeToLoop;       // Looping variable... (By default true)
+    JSONObject obj;
+
+    // Don't touch anything in here...
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_maps);
+
+        searchBusText = (EditText) findViewById(R.id.searchBusText);
+        StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
+        StrictMode.setThreadPolicy(policy);
+
+        // Obtain the SupportMapFragment and get notified when the map is ready to be used.
+        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
+                .findFragmentById(R.id.map);
+        mapFragment.getMapAsync(this);
+    }
+
+    // onClick function executed for the search button...
+    public void onBusSearch(View v){
+        // Get the bus No...
+        String bNo = searchBusText.getText().toString();
+
+        // TODO: A loop will begin here at this point. Loop checks the status of a flag to stop. [see onPause()]
+        //while(youWantMeToLoop){
+        // create a new object of busList for every search
+        busList = new ArrayList<>();
+        // Haven't added a loop because I was tes
+        // Validate that the number is entered...
+        if (bNo.equals("")) {
+            // For troublesome users who want to cause problems...
+            Toast.makeText(this, "Please enter a bus number", Toast.LENGTH_SHORT).show();
+        } else {
+            // The user has entered a bus number...
+            // So search for it...
+            busNo = Integer.parseInt(bNo);
+
+            HttpCall call = new HttpCall(busNo);
+
+            // Get the response...
+            try {
+                resp = call.handleHttpCall(getString(R.string.ip));
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+            // When not connected to internet handleHttpCall() returns "{}"; so show an error message...
+            if (resp.length() == 0) {
+                Toast.makeText(this, "Please check your internet connection", Toast.LENGTH_LONG).show();
+            } else {
+                // We are connected and hence get the data...
+                // Something like this...
+                // {"busArray":[{"Reg_No": "Mh04k1312" ...}, {}, {}]}
+                try {
+                    buses = resp.getJSONArray("busArray");
+
+                    // We get just one bus as a result...
+                    if (buses.length() == 1) {
+                        obj = buses.getJSONObject(0);
+                        // It may happen that the user enters an invalid bus number...
+                        // So, in such a case the reply from the server contains the following JSON data...
+                        // ->   {"busArray":[{"Reg_No" = "0"}]} indicating that the bus number is invalid...
+                        if (obj.getString("Reg_No").equals("0")){
+                            Toast.makeText(this, "Bus not found", Toast.LENGTH_LONG).show();
+                            Log.d("BUS", "Bus not found");
+                        }
+                        // Or we get one bus but a valid one...
+                        else{
+                            obj = buses.getJSONObject(0);
+                            Log.d("YOLO", buses.toString());
+                            Bus bus = new Bus(obj.getString("Reg_No"), obj.getInt("Bus_No"), obj.getInt("Count"), obj.getDouble("loc_X"), obj.getDouble("loc_Y"));
+                            Log.d("BUS", "Location of "+bus.Reg_No+": "+bus.loc_X+", "+bus.loc_Y);
+
+                            // Add bus to ArrayList here...
+                            busList.add(bus);
+                        }
+                        // Or we get multiple buses...
+                    } else {
+                        for (int i = 0; i < buses.length(); i++){
+                            obj = buses.getJSONObject(i);
+                            Bus bus = new Bus(obj.getString("Reg_No"), obj.getInt("Bus_No"), obj.getInt("Count"), obj.getDouble("loc_X"), obj.getDouble("loc_Y"));
+                            Log.d("BUS", "(multi) Location of "+bus.Reg_No+": "+bus.loc_X+", "+bus.loc_Y);
+
+                            // Add bus to ArrayList here...
+                            busList.add(bus);
+                        }
+                    }
+
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+
+
+
+                // Call a function to plot locations of buses in the ArrayList...
+                busPlotter();
+
+                // Ask for new location after a delay
+
+                //Log.d("BUS", "onCreate: "+resp.toString());
+            }
+
+
+
+        }
+        //} // while loop ends here...
+
+    }
+
+    private void busStopPlotter(int busNo) throws JSONException {
+Log.d("stop", "stop");
+        JSONObject route;
+        JSONObject stop;
+        JSONArray  stops;
+
+        //BUS NO 1
+        route  = new JSONObject();
+        stops  = new JSONArray();
+
+        stop   = new JSONObject();
+        stop.put("name", "Bandra").put("X", 72.8407).put("Y", 19.0549).put("color", BitmapDescriptorFactory.HUE_GREEN);
+        stops.put(stop);
+
+        stop   = new JSONObject();
+        stop.put("name", "Mahim").put("X", 72.8466).put("Y", 19.0406).put("color", BitmapDescriptorFactory.HUE_YELLOW);
+        stops.put(stop);
+
+        stop   = new JSONObject();
+        stop.put("name", "Matunga").put("X", 72.846944).put("Y", 19.0280).put("color", BitmapDescriptorFactory.HUE_YELLOW);
+        stops.put(stop);
+
+        stop   = new JSONObject();
+        stop.put("name", "Dadar").put("X", 72.8435).put("Y", 19.0173).put("color", BitmapDescriptorFactory.HUE_YELLOW);
+        stops.put(stop);
+
+        stop   = new JSONObject();
+        stop.put("name", "Elphinstone").put("X", 72.8359).put("Y", 19.0075).put("color", BitmapDescriptorFactory.HUE_YELLOW);
+        stops.put(stop);
+
+        stop   = new JSONObject();
+        stop.put("name", "Lower Parel").put("X", 72.8309).put("Y", 18.9964).put("color", BitmapDescriptorFactory.HUE_YELLOW);
+        stops.put(stop);
+
+        stop   = new JSONObject();
+        stop.put("name", "Worli").put("X", 72.8290).put("Y", 18.9872).put("color", BitmapDescriptorFactory.HUE_ORANGE);
+        stops.put(stop);
+
+        route.put("1",stops);
+
+        //BUS NO 2
+        stops  = new JSONArray();
+
+        stop   = new JSONObject();
+        stop.put("name", "Versova").put("X", 72.8246).put("Y", 19.1249).put("color", BitmapDescriptorFactory.HUE_GREEN);
+        stops.put(stop);
+
+
+        stop   = new JSONObject();
+        stop.put("name", "Azad Nagar").put("X", 72.8311464).put("Y", 19.1251773).put("color", BitmapDescriptorFactory.HUE_YELLOW);
+        stops.put(stop);
+
+        stop   = new JSONObject();
+        stop.put("name", "Andheri").put("X", 72.8401101).put("Y", 19.1216048).put("color", BitmapDescriptorFactory.HUE_YELLOW);
+        stops.put(stop);
+
+        stop   = new JSONObject();
+        stop.put("name", "Western Express Highway").put("X", 72.8559706).put("Y", 19.1158892).put("color", BitmapDescriptorFactory.HUE_YELLOW);
+        stops.put(stop);
+
+        stop   = new JSONObject();
+        stop.put("name", "Marol Naka").put("X", 72.8783548).put("Y", 19.1081354).put("color", BitmapDescriptorFactory.HUE_YELLOW);
+        stops.put(stop);
+
+        stop   = new JSONObject();
+        stop.put("name", "Airport Road").put("X", 72.8714288).put("Y", 19.1103598).put("color", BitmapDescriptorFactory.HUE_YELLOW);
+        stops.put(stop);
+
+        stop   = new JSONObject();
+        stop.put("name", "Saki Naka").put("X", 72.887843).put("Y", 19.1026557).put("color", BitmapDescriptorFactory.HUE_ORANGE);
+        stops.put(stop);
+
+        route.put("2",stops);
+
+
+        //Search
+        Log.d("Bus", route.toString());
+        stops = route.getJSONArray(""+busNo);
+
+        MarkerOptions mo = new MarkerOptions();
+        for(int o = 0; o<stops.length(); o++){
+            stop = stops.getJSONObject(o);
+
+            LatLng l = new LatLng(stop.getDouble("Y"), stop.getDouble("X"));
+            mo.position(l);
+            mo.snippet("Bus Stop");
+            mo.alpha(0.6f);
+            mo.title(stop.getString("name"));
+            mo.icon(BitmapDescriptorFactory.defaultMarker((float) stop.getDouble("color")));
+
+            mMap.addMarker(mo);
+            mMap.animateCamera(CameraUpdateFactory.newLatLng(l));
+
+        }
+    }
+
+
+    public void onBusRoute(View v){
+        String BUS_NO = searchBusText.getText().toString();
+        if(BUS_NO.length()>=1){
+            Intent i=new Intent(this, Route.class);
+            i.putExtra("BUS_NO", BUS_NO);
+            startActivity(i);
+        }
+    }
+
+    public void busPlotter(){
+        MarkerOptions mo = new MarkerOptions();
+        //mMap.setMapType(GoogleMap.MAP_TYPE_HYBRID);       // Not required...
+
+        mMap.clear();
+
+        try {
+            busStopPlotter(busNo);
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+
+
+        for(Bus bus: busList){
+            LatLng l = new LatLng(bus.loc_Y, bus.loc_X);
+            mo.position(l);
+            mo.snippet("Count:"+bus.Count);
+            mo.title(bus.Reg_No);
+            mMap.addMarker(mo);
+            mMap.animateCamera(CameraUpdateFactory.newLatLng(l));
+        }
+    }
+    @Override
+    protected void onPause() {
+        super.onPause();
+        // TODO: Stop the loop by changing the flag so that the loop doesn't run in the bg... Can be done in onDestroy as well...
+    }
+
+    /**
+     * Manipulates the map once available.
+     * This callback is triggered when the map is ready to be used.
+     * This is where we can add markers or lines, add listeners or move the camera. In this case,
+     * we just add a marker near Sydney, Australia.
+     * If Google Play services is not installed on the device, the user will be prompted to install
+     * it inside the SupportMapFragment. This method will only be triggered once the user has
+     * installed Google Play services and returned to the app.
+     */
+
+    @Override
+    public void onMapReady(GoogleMap googleMap) {
+        mMap = googleMap;
+        mMap.animateCamera(CameraUpdateFactory.zoomBy(11));
+    }
+}
+
+//Some irrelevant string that won't cause a problem. Leave it alone. (-.-)
+//xmlns:map="http://schemas.android.com/apk/res-auto"
